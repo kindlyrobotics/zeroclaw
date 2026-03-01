@@ -1,0 +1,52 @@
+# Grant Writer Workflow
+
+default_provider = "openrouter"
+default_model = "anthropic/claude-sonnet-4"
+api_key = "YOUR_API_KEY"
+
+[agent]
+max_tool_iterations = 25
+
+[identity]
+format = "openclaw"
+
+[memory]
+backend = "sqlite"
+auto_save = true
+
+[cron]
+enabled = true
+
+[browser]
+enabled = true
+allowed_domains = [
+    # "grants.gov",
+    # "nsf.gov",
+    # "nih.gov",
+]
+
+[http_request]
+enabled = true
+allowed_domains = []
+timeout_secs = 30
+
+[channels_config.email]
+imap_host = "imap.gmail.com"
+imap_port = 993
+smtp_host = "smtp.gmail.com"
+smtp_port = 465
+smtp_tls = true
+username = "YOUR_EMAIL"
+password = "YOUR_APP_PASSWORD"
+from_address = "YOUR_EMAIL"
+allowed_senders = ["*"]
+
+[autonomy]
+level = "full"
+workspace_only = true
+max_actions_per_hour = 50
+
+[cost]
+enabled = true
+daily_limit_usd = 15.0
+monthly_limit_usd = 200.0

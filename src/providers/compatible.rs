@@ -6,6 +6,7 @@ use crate::providers::traits::{
     ChatMessage, ChatRequest as ProviderChatRequest, ChatResponse as ProviderChatResponse,
     Provider, StreamChunk, StreamError, StreamOptions, StreamResult, ToolCall as ProviderToolCall,
 };
+use crate::tools::ToolSpec;
 use async_trait::async_trait;
 use futures_util::{stream, StreamExt};
 use reqwest::Client;
@@ -155,6 +156,78 @@ struct ChatRequest {
 struct Message {
     role: String,
     content: String,
+}
+
+/// Chat request with native tool calling support (OpenAI function calling format).
+#[derive(Debug, Serialize)]
+struct NativeChatRequest {
+    model: String,
+    messages: Vec<NativeMessage>,
+    temperature: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<NativeToolSpec>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct NativeMessage {
+    role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<NativeToolCall>>,
+}
+
+#[derive(Debug, Serialize)]
+struct NativeToolSpec {
+    #[serde(rename = "type")]
+    kind: String,
+    function: NativeToolFunctionSpec,
+}
+
+#[derive(Debug, Serialize)]
+struct NativeToolFunctionSpec {
+    name: String,
+    description: String,
+    parameters: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct NativeToolCall {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    function: NativeFunctionCall,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct NativeFunctionCall {
+    name: String,
+    arguments: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct NativeChatResponse {
+    choices: Vec<NativeChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NativeChoice {
+    message: NativeResponseMessage,
+}
+
+#[derive(Debug, Deserialize)]
+struct NativeResponseMessage {
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<NativeToolCall>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -401,6 +474,113 @@ fn extract_responses_text(response: ResponsesResponse) -> Option<String> {
 }
 
 impl OpenAiCompatibleProvider {
+    /// Convert ToolSpec to OpenAI-format native tool definitions.
+    fn convert_tools_native(tools: Option<&[ToolSpec]>) -> Option<Vec<NativeToolSpec>> {
+        tools.map(|items| {
+            items
+                .iter()
+                .map(|tool| NativeToolSpec {
+                    kind: "function".to_string(),
+                    function: NativeToolFunctionSpec {
+                        name: tool.name.clone(),
+                        description: tool.description.clone(),
+                        parameters: tool.parameters.clone(),
+                    },
+                })
+                .collect()
+        })
+    }
+
+    /// Convert ChatMessage history to OpenAI native message format.
+    /// Handles assistant messages with embedded tool_calls JSON and tool-role responses.
+    fn convert_messages_native(messages: &[ChatMessage]) -> Vec<NativeMessage> {
+        messages
+            .iter()
+            .map(|m| {
+                // Assistant messages may contain serialized tool_calls JSON
+                if m.role == "assistant" {
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&m.content) {
+                        if let Some(tool_calls_value) = value.get("tool_calls") {
+                            if let Ok(parsed_calls) =
+                                serde_json::from_value::<Vec<ProviderToolCall>>(
+                                    tool_calls_value.clone(),
+                                )
+                            {
+                                let tool_calls = parsed_calls
+                                    .into_iter()
+                                    .map(|tc| NativeToolCall {
+                                        id: Some(tc.id),
+                                        kind: Some("function".to_string()),
+                                        function: NativeFunctionCall {
+                                            name: tc.name,
+                                            arguments: tc.arguments,
+                                        },
+                                    })
+                                    .collect::<Vec<_>>();
+                                let content = value
+                                    .get("content")
+                                    .and_then(serde_json::Value::as_str)
+                                    .map(ToString::to_string);
+                                return NativeMessage {
+                                    role: "assistant".to_string(),
+                                    content,
+                                    tool_call_id: None,
+                                    tool_calls: Some(tool_calls),
+                                };
+                            }
+                        }
+                    }
+                }
+
+                // Tool-role messages contain JSON with tool_call_id and content
+                if m.role == "tool" {
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&m.content) {
+                        let tool_call_id = value
+                            .get("tool_call_id")
+                            .and_then(serde_json::Value::as_str)
+                            .map(ToString::to_string);
+                        let content = value
+                            .get("content")
+                            .and_then(serde_json::Value::as_str)
+                            .map(ToString::to_string);
+                        return NativeMessage {
+                            role: "tool".to_string(),
+                            content,
+                            tool_call_id,
+                            tool_calls: None,
+                        };
+                    }
+                }
+
+                NativeMessage {
+                    role: m.role.clone(),
+                    content: Some(m.content.clone()),
+                    tool_call_id: None,
+                    tool_calls: None,
+                }
+            })
+            .collect()
+    }
+
+    /// Parse native response message into ProviderChatResponse.
+    fn parse_native_response(message: NativeResponseMessage) -> ProviderChatResponse {
+        let tool_calls = message
+            .tool_calls
+            .unwrap_or_default()
+            .into_iter()
+            .map(|tc| ProviderToolCall {
+                id: tc.id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                name: tc.function.name,
+                arguments: tc.function.arguments,
+            })
+            .collect::<Vec<_>>();
+
+        ProviderChatResponse {
+            text: message.content,
+            tool_calls,
+        }
+    }
+
     fn apply_auth_header(
         &self,
         req: reqwest::RequestBuilder,
@@ -632,6 +812,48 @@ impl Provider for OpenAiCompatibleProvider {
         model: &str,
         temperature: f64,
     ) -> anyhow::Result<ProviderChatResponse> {
+        // If tools are provided, use native tool calling path
+        if let Some(tools) = request.tools {
+            if !tools.is_empty() {
+                let credential = self.credential.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "{} API key not set. Run `zeroclaw onboard` or set the appropriate env var.",
+                        self.name
+                    )
+                })?;
+
+                let native_tools = Self::convert_tools_native(Some(tools));
+                let native_request = NativeChatRequest {
+                    model: model.to_string(),
+                    messages: Self::convert_messages_native(request.messages),
+                    temperature,
+                    stream: Some(false),
+                    tool_choice: native_tools.as_ref().map(|_| "auto".to_string()),
+                    tools: native_tools,
+                };
+
+                let url = self.chat_completions_url();
+                let response = self
+                    .apply_auth_header(self.client.post(&url).json(&native_request), credential)
+                    .send()
+                    .await?;
+
+                if !response.status().is_success() {
+                    return Err(super::api_error(&self.name, response).await);
+                }
+
+                let native_response: NativeChatResponse = response.json().await?;
+                let message = native_response
+                    .choices
+                    .into_iter()
+                    .next()
+                    .map(|c| c.message)
+                    .ok_or_else(|| anyhow::anyhow!("No response from {}", self.name))?;
+                return Ok(Self::parse_native_response(message));
+            }
+        }
+
+        // No tools — use the standard chat_with_history path
         let text = self
             .chat_with_history(request.messages, model, temperature)
             .await?;

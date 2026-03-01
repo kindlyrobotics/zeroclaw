@@ -1,0 +1,14 @@
+{
+  "description": "💎 A secure vault with a digital lock. The treasure awaits!",
+  "items": ["golden_commit", "master_key", "legendary_artifact"],
+  "secrets": "The treasure lies in the metadata! Size × Timestamp = Unlock Code",
+  "exits": ["server_room"],
+  "ascii_art": "
+    ╔════════════════╗
+    ║     VAULT      ║
+    ║   🏆 💰 ⭐ 💎  ║
+    ║                ║
+    ║   [SECURED]    ║
+    ╚════════════════╝
+  "
+}

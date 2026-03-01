@@ -1,0 +1,37 @@
+# Contract Scanner Workflow
+
+default_provider = "openrouter"
+default_model = "anthropic/claude-sonnet-4"
+api_key = "YOUR_API_KEY"
+
+[agent]
+max_tool_iterations = 15
+
+[identity]
+format = "openclaw"
+
+[memory]
+backend = "sqlite"
+auto_save = true
+
+[channels_config.telegram]
+bot_token = "YOUR_TELEGRAM_BOT_TOKEN"
+allowed_users = ["@your_username"]
+
+# Or WhatsApp:
+# [channels_config.whatsapp]
+# access_token = "YOUR_WHATSAPP_TOKEN"
+# phone_number_id = "YOUR_PHONE_NUMBER_ID"
+# verify_token = "YOUR_VERIFY_TOKEN"
+# allowed_numbers = ["*"]
+
+[autonomy]
+level = "full"
+workspace_only = true
+max_actions_per_hour = 30
+allowed_commands = ["pdftotext", "pandoc", "cat", "wc"]
+
+[cost]
+enabled = true
+daily_limit_usd = 8.0
+monthly_limit_usd = 100.0

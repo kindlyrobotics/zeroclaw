@@ -1,0 +1,14 @@
+{
+  "description": "🚪 A mysterious room filled with glowing terminals",
+  "items": ["ancient_usb_drive", "cryptic_note"],
+  "secrets": "The walls whisper: 'Check file timestamps for the code'",
+  "exits": ["server_room"],
+  "ascii_art": "
+    ╔════════════════╗
+    ║   ENTRANCE     ║
+    ║   💻  📝  🔦   ║
+    ║                ║
+    ║   [→ Server]   ║
+    ╚════════════════╝
+  "
+}

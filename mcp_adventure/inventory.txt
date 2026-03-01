@@ -1,0 +1,7 @@
+=== 🎒 INVENTORY ===
+Empty - explore to find items!
+
+Hints:
+- Use MCP read operations to discover items
+- Check file metadata for puzzle clues
+- File size + timestamp = treasure coordinates

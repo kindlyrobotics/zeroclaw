@@ -1,0 +1,38 @@
+# Lead Qualification Workflow
+# Merge these sections into ~/.zeroclaw/config.toml
+
+default_provider = "openrouter"
+default_model = "anthropic/claude-sonnet-4"
+api_key = "YOUR_API_KEY"
+
+[agent]
+max_tool_iterations = 10
+max_history_messages = 100
+
+[identity]
+format = "openclaw"
+
+[memory]
+backend = "sqlite"
+auto_save = true
+
+[channels_config.telegram]
+bot_token = "YOUR_TELEGRAM_BOT_TOKEN"
+allowed_users = ["@your_username"]
+
+# Or use WhatsApp instead:
+# [channels_config.whatsapp]
+# access_token = "YOUR_WHATSAPP_TOKEN"
+# phone_number_id = "YOUR_PHONE_NUMBER_ID"
+# verify_token = "YOUR_VERIFY_TOKEN"
+# allowed_numbers = ["*"]
+
+[agents.handoff]
+provider = "openrouter"
+model = "anthropic/claude-sonnet-4"
+system_prompt = "You handle qualified leads. Summarize the qualification and draft a handoff email to the sales team."
+
+[cost]
+enabled = true
+daily_limit_usd = 10.0
+monthly_limit_usd = 150.0

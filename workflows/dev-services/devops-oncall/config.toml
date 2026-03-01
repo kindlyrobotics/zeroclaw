@@ -1,0 +1,46 @@
+# DevOps On-Call Workflow
+
+default_provider = "openrouter"
+default_model = "anthropic/claude-sonnet-4"
+api_key = "YOUR_API_KEY"
+
+[agent]
+max_tool_iterations = 20
+max_history_messages = 50
+
+[identity]
+format = "openclaw"
+
+[memory]
+backend = "sqlite"
+auto_save = true
+
+[cron]
+enabled = true
+
+[http_request]
+enabled = true
+allowed_domains = []
+timeout_secs = 10
+
+[channels_config.telegram]
+bot_token = "YOUR_TELEGRAM_BOT_TOKEN"
+allowed_users = ["@your_username"]
+
+# Or Slack:
+# [channels_config.slack]
+# bot_token = "YOUR_SLACK_BOT_TOKEN"
+# app_token = "YOUR_SLACK_APP_TOKEN"
+# channel_id = "YOUR_CHANNEL_ID"
+# allowed_users = []
+
+[autonomy]
+level = "full"
+workspace_only = false
+max_actions_per_hour = 200
+allowed_commands = ["curl", "ping", "dig", "systemctl", "docker", "kubectl", "ssh", "tail", "grep", "ps", "top", "df", "free", "uptime"]
+
+[cost]
+enabled = true
+daily_limit_usd = 10.0
+monthly_limit_usd = 150.0

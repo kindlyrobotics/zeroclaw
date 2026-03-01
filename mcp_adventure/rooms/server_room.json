@@ -1,0 +1,14 @@
+{
+  "description": "🖥️ Humming servers line the walls, LEDs blinking rhythmically",
+  "items": ["network_cable", "admin_badge", "encrypted_key"],
+  "secrets": "File sizes hold the key: multiply them for coordinates",
+  "exits": ["entrance", "vault"],
+  "ascii_art": "
+    ╔════════════════╗
+    ║  SERVER ROOM   ║
+    ║  🔌 💾 🔐 🌐  ║
+    ║                ║
+    ║  ← | | | | →  ║
+    ╚════════════════╝
+  "
+}

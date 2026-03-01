@@ -1,6 +1,7 @@
 pub mod bridge;
 pub mod client;
 pub mod config;
+pub mod orchestrator;
 pub mod protocol;
 pub mod transport;
 

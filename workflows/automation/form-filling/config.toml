@@ -1,0 +1,35 @@
+# Form Filling Workflow
+
+default_provider = "openrouter"
+default_model = "anthropic/claude-sonnet-4"
+api_key = "YOUR_API_KEY"
+
+[agent]
+max_tool_iterations = 20
+
+[identity]
+format = "openclaw"
+
+[memory]
+backend = "sqlite"
+auto_save = true
+
+[browser]
+enabled = true
+allowed_domains = [
+    # Add form domains
+]
+
+[channels_config.telegram]
+bot_token = "YOUR_TELEGRAM_BOT_TOKEN"
+allowed_users = ["@your_username"]
+
+[autonomy]
+level = "full"
+workspace_only = true
+max_actions_per_hour = 50
+
+[cost]
+enabled = true
+daily_limit_usd = 8.0
+monthly_limit_usd = 100.0

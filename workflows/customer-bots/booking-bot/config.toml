@@ -1,0 +1,44 @@
+# Booking Bot Workflow
+
+default_provider = "openrouter"
+default_model = "anthropic/claude-sonnet-4"
+api_key = "YOUR_API_KEY"
+
+[agent]
+max_tool_iterations = 10
+max_history_messages = 50
+
+[identity]
+format = "openclaw"
+
+[memory]
+backend = "sqlite"
+auto_save = true
+
+[cron]
+enabled = true
+
+[channels_config.whatsapp]
+access_token = "YOUR_WHATSAPP_TOKEN"
+phone_number_id = "YOUR_PHONE_NUMBER_ID"
+verify_token = "YOUR_VERIFY_TOKEN"
+allowed_numbers = ["*"]
+
+# Or Telegram:
+# [channels_config.telegram]
+# bot_token = "YOUR_TELEGRAM_BOT_TOKEN"
+# allowed_users = ["*"]
+
+# Optional email for confirmations:
+# [channels_config.email]
+# imap_host = "imap.gmail.com"
+# smtp_host = "smtp.gmail.com"
+# username = "YOUR_EMAIL"
+# password = "YOUR_APP_PASSWORD"
+# from_address = "YOUR_EMAIL"
+# allowed_senders = ["*"]
+
+[cost]
+enabled = true
+daily_limit_usd = 5.0
+monthly_limit_usd = 75.0
