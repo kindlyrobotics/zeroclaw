@@ -76,6 +76,16 @@ enum NativeContentOut {
         tool_use_id: String,
         content: String,
     },
+    #[serde(rename = "image")]
+    Image { source: ImageSource },
+}
+
+#[derive(Debug, Serialize)]
+struct ImageSource {
+    #[serde(rename = "type")]
+    kind: String,
+    media_type: String,
+    data: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -252,11 +262,50 @@ impl AnthropicProvider {
                     }
                 }
                 _ => {
+                    // Detect multimodal user messages encoded as JSON:
+                    // {"text": "...", "images": [{"data": "base64...", "media_type": "image/jpeg"}]}
+                    let content_blocks = if let Ok(v) =
+                        serde_json::from_str::<serde_json::Value>(&msg.content)
+                    {
+                        if v.get("images").and_then(|i| i.as_array()).is_some() {
+                            let text = v
+                                .get("text")
+                                .and_then(|t| t.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let images = v["images"].as_array().unwrap();
+                            let mut blocks: Vec<NativeContentOut> = images
+                                .iter()
+                                .filter_map(|img| {
+                                    let data = img.get("data")?.as_str()?.to_string();
+                                    let media_type =
+                                        img.get("media_type")?.as_str()?.to_string();
+                                    Some(NativeContentOut::Image {
+                                        source: ImageSource {
+                                            kind: "base64".to_string(),
+                                            media_type,
+                                            data,
+                                        },
+                                    })
+                                })
+                                .collect();
+                            if !text.is_empty() {
+                                blocks.push(NativeContentOut::Text { text });
+                            }
+                            blocks
+                        } else {
+                            vec![NativeContentOut::Text {
+                                text: msg.content.clone(),
+                            }]
+                        }
+                    } else {
+                        vec![NativeContentOut::Text {
+                            text: msg.content.clone(),
+                        }]
+                    };
                     native_messages.push(NativeMessage {
                         role: "user".to_string(),
-                        content: vec![NativeContentOut::Text {
-                            text: msg.content.clone(),
-                        }],
+                        content: content_blocks,
                     });
                 }
             }

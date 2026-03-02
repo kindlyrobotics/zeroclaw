@@ -616,6 +616,15 @@ async fn handle_pair(State(state): State<AppState>, headers: HeaderMap) -> impl 
     }
 }
 
+/// Image attachment in a webhook request (base64-encoded).
+#[derive(serde::Deserialize)]
+pub struct ImageAttachment {
+    /// Base64-encoded image data (no data-URL prefix).
+    pub data: String,
+    /// MIME type: "image/jpeg", "image/png", "image/gif", "image/webp"
+    pub media_type: String,
+}
+
 /// Webhook request body
 #[derive(serde::Deserialize)]
 pub struct WebhookBody {
@@ -623,6 +632,9 @@ pub struct WebhookBody {
     /// Optional conversation ID for multi-turn threading.
     /// When present, the gateway loads prior messages and persists the exchange.
     pub conversation_id: Option<String>,
+    /// Optional image attachments — encoded as base64 for vision-capable providers.
+    #[serde(default)]
+    pub images: Vec<ImageAttachment>,
 }
 
 /// POST /webhook — main webhook endpoint
@@ -695,7 +707,38 @@ async fn handle_webhook(
         }
     }
 
-    let message = &webhook_body.message;
+    // Route image attachments based on provider vision capability.
+    // Only Anthropic supports multimodal content blocks; all other providers
+    // receive a plain-text fallback note so they don't see raw JSON.
+    let message_content: String = if !webhook_body.images.is_empty() {
+        if state.provider_name == "anthropic" {
+            let images_json: Vec<serde_json::Value> = webhook_body
+                .images
+                .iter()
+                .map(|img| {
+                    serde_json::json!({
+                        "data": img.data,
+                        "media_type": img.media_type,
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "text": webhook_body.message,
+                "images": images_json,
+            })
+            .to_string()
+        } else {
+            let n = webhook_body.images.len();
+            let suffix = if n == 1 { "" } else { "s" };
+            format!(
+                "{}\n\n[{n} image{suffix} attached — vision is not supported by this model]",
+                webhook_body.message
+            )
+        }
+    } else {
+        webhook_body.message.clone()
+    };
+    let message = &message_content;
     let conversation_id = webhook_body.conversation_id.as_deref();
 
     if state.auto_save {
