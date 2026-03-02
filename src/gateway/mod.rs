@@ -27,7 +27,7 @@ use crate::util::truncate_with_ellipsis;
 use anyhow::Result;
 use axum::{
     body::Bytes,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
     routing::{delete, get, post},
@@ -493,6 +493,9 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         // Workflow discovery and execution
         .route("/workflows", get(workflows::handle_list))
         .route("/workflows/{category}/{id}/run", post(workflows::handle_run))
+        // MCP server management
+        .route("/mcp/servers", get(handle_mcp_servers))
+        .route("/mcp/servers/{name}/toggle", post(handle_mcp_toggle))
         .with_state(state)
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TimeoutLayer::with_status_code(
@@ -999,6 +1002,170 @@ async fn handle_whatsapp_message(
 
     // Acknowledge the webhook
     (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
+}
+
+/// GET /mcp/servers — list all configured MCP servers with enabled status and tool counts
+async fn handle_mcp_servers(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(resp) = auth::require_auth(&state.pairing, &headers) {
+        return resp;
+    }
+
+    let mcp_config = &state.config.mcp;
+    let health = state
+        .mcp_manager
+        .as_ref()
+        .map(|mgr| mgr.health_status())
+        .unwrap_or_else(|| serde_json::json!([]));
+
+    // Build a map of server_name -> alive from health status
+    let alive_map: std::collections::HashMap<String, bool> = health
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| {
+                    let name = v["server"].as_str()?.to_string();
+                    let alive = v["alive"].as_bool().unwrap_or(false);
+                    Some((name, alive))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let servers: Vec<serde_json::Value> = mcp_config
+        .servers
+        .iter()
+        .map(|(name, cfg)| {
+            serde_json::json!({
+                "name": name,
+                "enabled": cfg.enabled,
+                "transport": cfg.transport,
+                "alive": alive_map.get(name).copied().unwrap_or(false),
+            })
+        })
+        .collect();
+
+    (StatusCode::OK, Json(serde_json::json!({"servers": servers})))
+}
+
+/// POST /mcp/servers/:name/toggle — toggle enabled flag for an MCP server in config file
+async fn handle_mcp_toggle(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(server_name): Path<String>,
+) -> impl IntoResponse {
+    if let Err(resp) = auth::require_auth(&state.pairing, &headers) {
+        return resp;
+    }
+
+    // Validate the server name exists in config
+    if !state.config.mcp.servers.contains_key(&server_name) {
+        let err = serde_json::json!({"error": format!("Unknown MCP server: {server_name}")});
+        return (StatusCode::NOT_FOUND, Json(err));
+    }
+
+    let config_path = &state.config.config_path;
+    let content = match std::fs::read_to_string(config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            let err = serde_json::json!({"error": format!("Failed to read config: {e}")});
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(err));
+        }
+    };
+
+    let new_content = toggle_mcp_enabled_in_toml(&content, &server_name);
+
+    if let Err(e) = std::fs::write(config_path, &new_content) {
+        let err = serde_json::json!({"error": format!("Failed to write config: {e}")});
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(err));
+    }
+
+    // Determine the new state by re-reading the line we just wrote
+    let new_enabled = read_mcp_enabled_from_toml(&new_content, &server_name);
+    tracing::info!(server = %server_name, enabled = new_enabled, "MCP server toggled in config");
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "server": server_name,
+            "enabled": new_enabled,
+            "note": "Restart the gateway for changes to take effect"
+        })),
+    )
+}
+
+/// Toggle the `enabled` field for an MCP server in a TOML string, preserving formatting.
+/// If the field doesn't exist in the section, it inserts `enabled = false` (disabling it).
+fn toggle_mcp_enabled_in_toml(content: &str, server_name: &str) -> String {
+    let section_header = format!("[mcp.servers.{server_name}]");
+    let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+    let mut in_section = false;
+    let mut enabled_line_idx: Option<usize> = None;
+    let mut insert_after_idx: Option<usize> = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed == section_header {
+            in_section = true;
+            insert_after_idx = Some(i);
+            continue;
+        }
+        if in_section {
+            if trimmed.starts_with('[') {
+                // Next section started
+                break;
+            }
+            if trimmed.starts_with("enabled") {
+                enabled_line_idx = Some(i);
+                break;
+            }
+            if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                insert_after_idx = Some(i);
+            }
+        }
+    }
+
+    if let Some(idx) = enabled_line_idx {
+        // Toggle existing line
+        let current = lines[idx].contains("true");
+        lines[idx] = format!("enabled = {}", !current);
+    } else if let Some(idx) = insert_after_idx {
+        // Insert enabled = false after section header or last key
+        lines.insert(idx + 1, "enabled = false".to_string());
+    }
+
+    let mut result = lines.join("\n");
+    // Preserve trailing newline if original had one
+    if content.ends_with('\n') {
+        result.push('\n');
+    }
+    result
+}
+
+/// Read current enabled value for an MCP server from TOML string.
+fn read_mcp_enabled_from_toml(content: &str, server_name: &str) -> bool {
+    let section_header = format!("[mcp.servers.{server_name}]");
+    let mut in_section = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == section_header {
+            in_section = true;
+            continue;
+        }
+        if in_section {
+            if trimmed.starts_with('[') {
+                break;
+            }
+            if trimmed.starts_with("enabled") {
+                return trimmed.contains("true");
+            }
+        }
+    }
+    // Default: enabled if no field present
+    true
 }
 
 #[cfg(test)]

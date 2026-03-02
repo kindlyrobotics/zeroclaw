@@ -34,6 +34,10 @@ impl McpManager {
         let mut tools: Vec<Box<dyn Tool>> = Vec::new();
 
         for (server_name, server_config) in &config.servers {
+            if !server_config.enabled {
+                tracing::info!(server = %server_name, "MCP server disabled — skipping");
+                continue;
+            }
             match connect_server(server_name, server_config).await {
                 Ok((client, server_tools)) => {
                     let tool_count = server_tools.len();
