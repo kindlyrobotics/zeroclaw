@@ -330,7 +330,15 @@ RLS policies set to `public_readwrite` — no session cookies needed. All CRUD o
 | `agents` | `agent_id`, `name`, `description`, `icon`, `color`, `system_prompt`, `model`, `provider`, `temperature`, `tools`, `opening_message`, `suggested_questions`, `is_system`, `is_enabled`, `sort_order`, `created_at`, `updated_at` | `public_readwrite` |
 | `user_sessions` | `email`, `cf_access_sub`, `last_seen`, `created_at` | private (default) |
 
+**Note:** The `agents` table did not exist initially — NCB does NOT auto-create tables. It was created manually via `mcp__nocodebackend__execute_sql` with a `CREATE TABLE` statement. Any new table must be created via SQL before the data API can write to it.
+
 MCP token (for MCP tools only, NOT for REST API): `ncb_5555d9c08f06607289b6bc7296b228436103afcee5ec30a5`
+
+### Seeded Agents
+
+| ID | agent_id | Name | Purpose |
+|----|----------|------|---------|
+| 1 | `ncb-admin` | NCB Admin | Full account-level access across all 19 NCB databases via MCP tools. Calls `mcp__nocodebackend__login` first, then can execute SQL, manage schemas, set RLS, create/inspect any instance. |
 
 ---
 
@@ -545,6 +553,11 @@ All UI changes MUST follow these rules for iOS notch/status bar compatibility:
 | Commit | Description |
 |--------|-------------|
 | `d947959` | NCB RLS set to public_readwrite; real cascade delete (conversations+messages), agent delete, updateConversationAfterMessage persists to NCB |
+
+**Post-deploy database changes (not in code):**
+- `agents` table created via `execute_sql` (NCB does not auto-create tables)
+- `agents` RLS set to `public_readwrite`
+- NCB Admin agent seeded (id=1, agent_id=`ncb-admin`) — full account access across all 19 NCB databases
 | `10f33e2` | Image resize before upload (≤1568px JPEG); MCP server toggle UI in sidebar |
 | `fbce96f` | Image and file attachment support in MessageInput (attach button, paste, drag-drop) |
 | `2211a06` | Chat UX: startup state restore, visible delete button, synthetic ZeroClaw primary agent |
