@@ -97,7 +97,7 @@ fn token_end(input: &str, from: usize) -> usize {
 /// Redacts tokens with prefixes like `sk-`, `xoxb-`, `xoxp-`, `ghp_`, `gho_`,
 /// `ghu_`, and `github_pat_`.
 pub fn scrub_secret_patterns(input: &str) -> String {
-    const PREFIXES: [&str; 7] = [
+    const PREFIXES: [&str; 9] = [
         "sk-",
         "xoxb-",
         "xoxp-",
@@ -105,6 +105,8 @@ pub fn scrub_secret_patterns(input: &str) -> String {
         "gho_",
         "ghu_",
         "github_pat_",
+        "kr_proj_",
+        "kr_user_",
     ];
 
     let mut scrubbed = input.to_string();
@@ -214,6 +216,7 @@ fn resolve_provider_credential(name: &str, credential_override: Option<&str>) ->
             vec!["ZAI_API_KEY"]
         }
         "nvidia" | "nvidia-nim" | "build.nvidia.com" => vec!["NVIDIA_API_KEY"],
+        "inferall" | "inferall-ai" => vec!["INFERALL_API_KEY", "AI_GATEWAY_KEY"],
         "synthetic" => vec!["SYNTHETIC_API_KEY"],
         "opencode" | "opencode-zen" => vec!["OPENCODE_API_KEY"],
         "vercel" | "vercel-ai" => vec!["VERCEL_API_KEY"],
@@ -405,6 +408,14 @@ pub fn create_provider_with_url(
         // ── AI inference routers ─────────────────────────────
         "astrai" => Ok(Box::new(OpenAiCompatibleProvider::new(
             "Astrai", "https://as-trai.com/v1", key, AuthStyle::Bearer,
+        ))),
+
+        // ── InferAll (api.inferall.ai) — unified AI gateway ──
+        "inferall" | "inferall-ai" => Ok(Box::new(OpenAiCompatibleProvider::new(
+            "InferAll",
+            api_url.unwrap_or("https://api.inferall.ai/ai/v1"),
+            key,
+            AuthStyle::Bearer,
         ))),
 
         // ── Bring Your Own Provider (custom URL) ───────────
