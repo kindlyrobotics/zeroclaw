@@ -355,6 +355,24 @@ api_key = "kr_proj_..."
 - Uses the OpenAI-compatible `/v1/messages` endpoint at `https://api.inferall.ai`
 - All models listed at `GET https://api.inferall.ai/ai/v1/models`
 
+### 8.7 ate Memory Integration
+
+ZeroClaw can connect to the ate CLI's MCP server for persistent memory:
+
+1. Install ate: `pip install ate` (or from the monorepo)
+2. The `.mcp.json` in the repo root auto-configures the connection
+3. Memory tools become available: `memory_search`, `memory_add`, `memory_info`
+
+Usage:
+
+```bash
+# Initialize a memory file
+ate memory init ./memory.mv2
+
+# Agent can now store and recall memories
+INFERALL_API_KEY=kr_proj_... zeroclaw agent -p inferall -m "Remember that the deploy key is..."
+```
+
 ## 9) Validation Matrix
 
 Default local checks for code changes:

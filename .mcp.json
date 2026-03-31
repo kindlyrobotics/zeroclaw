@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ate-memory": {
+      "command": "python",
+      "args": ["-m", "ate.mcp_server"],
+      "env": {
+        "ATE_MEMORY_PATH": "./memory.mv2",
+        "ATE_API_URL": "https://www.kindly.fyi/api"
+      }
+    }
+  }
+}
