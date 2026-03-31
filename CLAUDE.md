@@ -326,6 +326,35 @@ Use these rules to keep the trait/factory architecture stable under growth.
 - Keep observability useful but non-sensitive.
 - For `.github/workflows/**` changes, include Actions allowlist impact in PR notes and update `docs/actions-source-policy.md` when sources change.
 
+### 8.6 InferAll Provider
+
+ZeroClaw includes a built-in `inferall` provider that routes to the InferAll AI Gateway (`api.inferall.ai`). This is a unified proxy supporting OpenAI, Anthropic, Gemini, Replicate, and 186 NVIDIA NIM open-source models through a single API key.
+
+**Quick start:**
+
+```bash
+INFERALL_API_KEY=kr_proj_... zeroclaw agent -p inferall -m "Hello"
+```
+
+**Config (`~/.zeroclaw/config.toml`):**
+
+```toml
+[provider]
+name = "inferall"
+
+[provider.inferall]
+api_key = "kr_proj_..."
+# base_url defaults to https://api.inferall.ai
+```
+
+**Key details:**
+
+- Provider implementation: `src/providers/inferall.rs`
+- Factory registration key: `"inferall"`
+- Supports text, chat, streaming, and vision operations
+- Uses the OpenAI-compatible `/v1/messages` endpoint at `https://api.inferall.ai`
+- All models listed at `GET https://api.inferall.ai/ai/v1/models`
+
 ## 9) Validation Matrix
 
 Default local checks for code changes:
